@@ -21,8 +21,9 @@ exports.handler = async (event) => {
   try {
     // 3. Procesar datos de Tally
     const body = JSON.parse(event.body);
-    const song = body.fields.find(f => f.key === "song")?.value || "Sin título";
-    const name = body.fields.find(f => f.key === "name")?.value || "Anónimo";
+    const song = body.fields.find(f => f.key === "Cancion")?.value || "Sin título";
+    const name = body.fields.find(f => f.key === "Nombre-del-solicitante")?.value || "Anónimo";
+    const coment = body.fields.find(f => f.key === "Comentario")?.value || "Sin Comentario";
 
     // 4. Guardar en Notion
     const newRecord = await notion.pages.create({
@@ -33,6 +34,9 @@ exports.handler = async (event) => {
         },
         "Canción": { 
           rich_text: [{ text: { content: song } }] 
+        },
+        "Comentario": { 
+          rich_text: [{ text: { content: coment } }] 
         },
         "Estado": { 
           select: { name: "Pendiente" } 
@@ -45,6 +49,7 @@ exports.handler = async (event) => {
       id: newRecord.id,
       userName: name,
       songName: song,
+      comentName: coment,
       timestamp: new Date().toISOString()
     });
 
