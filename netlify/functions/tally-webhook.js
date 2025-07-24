@@ -21,9 +21,10 @@ exports.handler = async (event) => {
   try {
     // 3. Procesar datos de Tally
     const body = JSON.parse(event.body);
-    const song = body.fields.find(f => f.key === "Cancion")?.value || "Sin título";
-    const name = body.fields.find(f => f.key === "Nombre-del-solicitante")?.value || "Anónimo";
-    const coment = body.fields.find(f => f.key === "Comentario")?.value || "Sin Comentario";
+    const name = body.fields.find(f => f.key.startsWith("nombre-del-solicitante"))?.value || "Anónimo";
+    const song = body.fields.find(f => f.key.startsWith("cancion"))?.value || "Sin título";
+    const coment = body.fields.find(f => f.key.startsWith("comentario"))?.value || "Sin Comentario";
+
 
     // 4. Guardar en Notion
     const newRecord = await notion.pages.create({
@@ -53,6 +54,11 @@ exports.handler = async (event) => {
       timestamp: new Date().toISOString()
     });
 
+    return { statusCode: 200, body: "OK" };
+  } catch (error) {
+    return { statusCode: 500, body: "Error: " + error.message };
+  }
+};
     return { statusCode: 200, body: "OK" };
   } catch (error) {
     return { statusCode: 500, body: "Error: " + error.message };
