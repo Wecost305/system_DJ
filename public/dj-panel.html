@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Control Panel Pro</title>
+  <script src="https://js.pusher.com/7.0/pusher.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #8a2be2;
+      --primary-dark: #6a1cb9;
+      --secondary: #ff6b6b;
+      --dark: #121212;
+      --darker: #0a0a0a;
+      --light: #f8f9fa;
+      --gray: #2d2d2d;
+      --success: #4CAF50;
+      --card-bg: #1e1e1e;
+      --card-border: #333;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, var(--darker), var(--dark));
+      color: var(--light);
+      font-family: 'Segoe UI', 'Roboto', sans-serif;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--gray);
+      margin-bottom: 30px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo i {
+      font-size: 2.5rem;
+      color: var(--primary);
+    }
+
+    .logo h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(to right, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stats-container {
+      display: flex;
+      gap: 20px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 15px 20px;
+      text-align: center;
+      min-width: 150px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .stat-card .number {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin: 5px 0;
+      color: var(--primary);
+    }
+
+    .stat-card .label {
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 10px rgba(138, 43, 226, 0.3);
+    }
+
+    .btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(138, 43, 226, 0.4);
+    }
+
+    .btn i {
+      font-size: 1.1rem;
+    }
+
+    .btn-secondary {
+      background: var(--gray);
+    }
+
+    .btn-secondary:hover {
+      background: #3a3a3a;
+    }
+
+    .btn-success {
+      background: var(--success);
+    }
+
+    .requests-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .requests-table thead {
+      background: var(--primary);
+    }
+
+    .requests-table th {
+      padding: 18px 15px;
+      text-align: left;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .requests-table tbody tr {
+      border-bottom: 1px solid var(--card-border);
+      transition: all 0.3s ease;
+    }
+
+    .requests-table tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    .requests-table tbody tr:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .requests-table td {
+      padding: 16px 15px;
+    }
+
+    .song-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .song-icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(138, 43, 226, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .song-icon i {
+      color: var(--primary);
+    }
+
+    .song-details {
+      line-height: 1.4;
+    }
+
+    .song-title {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 4px;
+    }
+
+    .requester {
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+
+    .requester i {
+      margin-right: 5px;
+      color: var(--primary);
+    }
+
+    .timestamp {
+      color: #888;
+      font-size: 0.85rem;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .status-pending {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+    }
+
+    .status-completed {
+      background: rgba(76, 175, 80, 0.2);
+      color: var(--success);
+    }
+
+    .action-btn {
+      background: none;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      transform: scale(1.1);
+    }
+
+    .action-btn.complete {
+      color: var(--success);
+    }
+
+    .action-btn.complete:hover {
+      background: rgba(76, 175, 80, 0.2);
+    }
+
+    .action-btn.delete {
+      color: #ff6b6b;
+    }
+
+    .action-btn.delete:hover {
+      background: rgba(255, 107, 107, 0.2);
+    }
+
+    /* Animaciones */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(138, 43, 226, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0); }
+    }
+
+    .new-request {
+      animation: fadeIn 0.5s ease, pulse 1s 0.5s;
+    }
+
+    .notification-sound {
+      display: none;
+    }
+
+    footer {
+      text-align: center;
+      padding: 30px 0;
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 40px;
+      border-top: 1px solid var(--gray);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        gap: 20px;
+      }
+      
+      .stats-container {
+        width: 100%;
+        justify-content: center;
+      }
+      
+      .requests-table {
+        display: block;
+        overflow-x: auto;
+      }
+      
+      .controls {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <i class="fas fa-music"></i>
+        <h1>DJ Control Panel Pro</h1>
+      </div>
+      <div class="stats-container">
+        <div class="stat-card">
+          <div class="number" id="total-requests">0</div>
+          <div class="label">Solicitudes</div>
+        </div>
+        <div class="stat-card">
+          <div class="number" id="pending-requests">0</div>
+          <div class="label">Pendientes</div>
+        </div>
+        <div class="stat-card">
+          <div class="number" id="completed-requests">0</div>
+          <div class="label">Atendidas</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="controls">
+      <button class="btn" id="notifications-btn">
+        <i class="fas fa-bell"></i> Alternar Sonido
+      </button>
+      <button class="btn btn-secondary" id="clear-completed">
+        <i class="fas fa-trash"></i> Limpiar Atendidas
+      </button>
+    </div>
+
+    <div class="table-container">
+      <table class="requests-table">
+        <thead>
+          <tr>
+            <th style="width: 45%;">Canción</th>
+            <th style="width: 25%;">Solicitante</th>
+            <th style="width: 15%;">Hora</th>
+            <th style="width: 15%;">Estado</th>
+            <th style="width: 10%;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="requests-container">
+          <!-- Las solicitudes se añadirán aquí dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+    
+    <div id="empty-state" style="text-align: center; padding: 40px 20px; display: none;">
+      <i class="fas fa-music" style="font-size: 4rem; color: #333; margin-bottom: 20px;"></i>
+      <h3 style="color: #666; margin-bottom: 15px;">No hay solicitudes pendientes</h3>
+      <p style="color: #555;">Las solicitudes de canciones aparecerán aquí en tiempo real</p>
+    </div>
+  </div>
+  
+  <footer>
+    <p>Sistema de Solicitudes en Tiempo Real &copy; 2023</p>
+  </footer>
+
+  <!-- Sonido de notificación -->
+  <audio class="notification-sound" id="notification-sound">
+    <source src="https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3" type="audio/mpeg">
+  </audio>
+  
+  <script>
+    // Variables globales
+    let totalRequests = 0;
+    let pendingRequests = 0;
+    let completedRequests = 0;
+    let soundEnabled = false;
+    
+    // Configurar Pusher
+    const pusher = new Pusher('899fee44b186fe4085e1', {
+      cluster: 'us2',
+      forceTLS: true
+    });
+
+    const channel = pusher.subscribe('song-requests');
+    
+    // Referencias DOM
+    const requestsContainer = document.getElementById('requests-container');
+    const totalRequestsEl = document.getElementById('total-requests');
+    const pendingRequestsEl = document.getElementById('pending-requests');
+    const completedRequestsEl = document.getElementById('completed-requests');
+    const notificationSound = document.getElementById('notification-sound');
+    const notificationsBtn = document.getElementById('notifications-btn');
+    const clearCompletedBtn = document.getElementById('clear-completed');
+    const emptyState = document.getElementById('empty-state');
+    
+    // Toggle de sonido
+    notificationsBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      notificationsBtn.innerHTML = soundEnabled ? 
+        '<i class="fas fa-bell-slash"></i> Silenciar Notificaciones' : 
+        '<i class="fas fa-bell"></i> Activar Sonido';
+    });
+    
+    // Limpiar solicitudes atendidas
+    clearCompletedBtn.addEventListener('click', () => {
+      const completedRows = document.querySelectorAll('.status-completed');
+      completedRows.forEach(row => {
+        row.parentElement.remove();
+      });
+      checkEmptyState();
+    });
+    
+    // Función para actualizar contadores
+    function updateCounters() {
+      totalRequestsEl.textContent = totalRequests;
+      pendingRequestsEl.textContent = pendingRequests;
+      completedRequestsEl.textContent = completedRequests;
+    }
+    
+    // Función para verificar estado vacío
+    function checkEmptyState() {
+      if (requestsContainer.children.length === 0) {
+        emptyState.style.display = 'block';
+      } else {
+        emptyState.style.display = 'none';
+      }
+    }
+    
+    // Función para formatear la fecha
+    function formatTime(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // Escuchar nuevas solicitudes
+    channel.bind('new-request', data => {
+      // Actualizar contadores
+      totalRequests++;
+      pendingRequests++;
+      updateCounters();
+      
+      // Reproducir sonido si está habilitado
+      if (soundEnabled) {
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(e => console.log("Audio play error:", e));
+      }
+      
+      // Crear nueva fila en la tabla
+      const newRow = document.createElement('tr');
+      newRow.className = 'new-request';
+      newRow.innerHTML = `
+        <td>
+          <div class="song-info">
+            <div class="song-icon">
+              <i class="fas fa-music"></i>
+            </div>
+            <div class="song-details">
+              <div class="song-title">${data.songName}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="requester">
+            <i class="fas fa-user"></i>${data.userName}
+          </div>
+        </td>
+        <td class="timestamp">${formatTime(data.timestamp)}</td>
+        <td>
+          <span class="status-badge status-pending">Pendiente</span>
+        </td>
+        <td>
+          <button class="action-btn complete" title="Marcar como atendida" onclick="markAsDone(this, '${data.id}')">
+            <i class="fas fa-check"></i>
+          </button>
+          <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${data.id}')">
+            <i class="fas fa-times"></i>
+          </button>
+        </td>
+      `;
+      
+      // Añadir al principio de la tabla
+      requestsContainer.insertBefore(newRow, requestsContainer.firstChild);
+      checkEmptyState();
+    });
+    
+    // Marcar como completada
+    function markAsDone(btn, requestId) {
+      const row = btn.closest('tr');
+      
+      // Animación de salida
+      row.style.transform = 'translateX(-100px)';
+      row.style.opacity = '0';
+      row.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+      
+      setTimeout(() => {
+        // Actualizar contadores
+        pendingRequests--;
+        completedRequests++;
+        updateCounters();
+        
+        // Cambiar estado en la fila
+        const statusBadge = row.querySelector('.status-badge');
+        statusBadge.className = 'status-badge status-completed';
+        statusBadge.textContent = 'Atendida';
+        
+        // Cambiar botones
+        const buttons = row.querySelector('td:last-child');
+        buttons.innerHTML = `
+          <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${requestId}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        `;
+        
+        // Restaurar estilo
+        row.style.transform = '';
+        row.style.opacity = '';
+      }, 400);
+    }
+    
+    // Eliminar solicitud
+    function deleteRequest(btn, requestId) {
+      const row = btn.closest('tr');
+      
+      // Animación de eliminación
+      row.style.transform = 'scale(0.9)';
+      row.style.opacity = '0';
+      row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      
+      setTimeout(() => {
+        // Verificar estado antes de eliminar
+        const statusBadge = row.querySelector('.status-badge');
+        if (statusBadge.classList.contains('status-pending')) {
+          pendingRequests--;
+        } else {
+          completedRequests--;
+        }
+        totalRequests--;
+        updateCounters();
+        
+        row.remove();
+        checkEmptyState();
+      }, 300);
+    }
+    
+    // Inicializar contadores
+    updateCounters();
+    checkEmptyState();
+  </script>
+</body>
+</html>
