@@ -396,182 +396,173 @@
   </audio>
   
   <script>
-    // Variables globales
-    let totalRequests = 0;
-    let pendingRequests = 0;
-    let completedRequests = 0;
-    let soundEnabled = false;
-    
-    // Configurar Pusher
-    const pusher = new Pusher('899fee44b186fe4085e1', {
-      cluster: 'us2',
-      forceTLS: true
-    });
+  // --- Variables globales (sin cambios) ---
+  let totalRequests = 0;
+  let pendingRequests = 0;
+  let completedRequests = 0;
+  let soundEnabled = false;
+  
+  // --- Configurar Pusher (sin cambios) ---
+  const pusher = new Pusher('899fee44b186fe4085e1', { // Usa tu PUSHER_KEY
+    cluster: 'us2',
+    forceTLS: true
+  });
+  const channel = pusher.subscribe('song-requests');
+  
+  // --- Referencias DOM (sin cambios) ---
+  const requestsContainer = document.getElementById('requests-container');
+  const totalRequestsEl = document.getElementById('total-requests');
+  const pendingRequestsEl = document.getElementById('pending-requests');
+  const completedRequestsEl = document.getElementById('completed-requests');
+  const notificationSound = document.getElementById('notification-sound');
+  const notificationsBtn = document.getElementById('notifications-btn');
+  const clearCompletedBtn = document.getElementById('clear-completed');
+  const emptyState = document.getElementById('empty-state');
 
-    const channel = pusher.subscribe('song-requests');
+  // --- NUEVA FUNCIÓN PARA PINTAR UNA FILA ---
+  // (Hemos movido la lógica de crear una fila a su propia función para poder reutilizarla)
+  function renderRequest(data, isNew = false) {
+    const newRow = document.createElement('tr');
+    if (isNew) {
+      newRow.className = 'new-request'; // Añade animación solo a las nuevas
+    }
     
-    // Referencias DOM
-    const requestsContainer = document.getElementById('requests-container');
-    const totalRequestsEl = document.getElementById('total-requests');
-    const pendingRequestsEl = document.getElementById('pending-requests');
-    const completedRequestsEl = document.getElementById('completed-requests');
-    const notificationSound = document.getElementById('notification-sound');
-    const notificationsBtn = document.getElementById('notifications-btn');
-    const clearCompletedBtn = document.getElementById('clear-completed');
-    const emptyState = document.getElementById('empty-state');
+    newRow.innerHTML = `
+      <td>
+        <div class="song-info">
+          <div class="song-icon"><i class="fas fa-music"></i></div>
+          <div class="song-details"><div class="song-title">${data.songName}</div></div>
+        </div>
+      </td>
+      <td><div class="requester"><i class="fas fa-user"></i>${data.userName}</div></td>
+      <td class="timestamp">${formatTime(data.timestamp)}</td>
+      <td><span class="status-badge status-pending">Pendiente</span></td>
+      <td>
+        <button class="action-btn complete" title="Marcar como atendida" onclick="markAsDone(this, '${data.id}')"><i class="fas fa-check"></i></button>
+        <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${data.id}')"><i class="fas fa-times"></i></button>
+      </td>
+    `;
     
-    // Toggle de sonido
-    notificationsBtn.addEventListener('click', () => {
-      soundEnabled = !soundEnabled;
-      notificationsBtn.innerHTML = soundEnabled ? 
-        '<i class="fas fa-bell-slash"></i> Silenciar Notificaciones' : 
-        '<i class="fas fa-bell"></i> Activar Sonido';
-    });
-    
-    // Limpiar solicitudes atendidas
-    clearCompletedBtn.addEventListener('click', () => {
-      const completedRows = document.querySelectorAll('.status-completed');
-      completedRows.forEach(row => {
-        row.parentElement.remove();
+    requestsContainer.insertBefore(newRow, requestsContainer.firstChild);
+  }
+
+  // --- NUEVA FUNCIÓN PARA CARGAR DATOS INICIALES ---
+  async function loadInitialRequests() {
+    try {
+      // La URL de la función de Netlify es /.netlify/functions/NOMBRE_ARCHIVO
+      const response = await fetch('/.netlify/functions/get-requests');
+      if (!response.ok) {
+        throw new Error('No se pudo conectar al servidor.');
+      }
+      const requests = await response.json();
+
+      // Limpiamos la tabla por si acaso
+      requestsContainer.innerHTML = '';
+
+      // Pintamos cada solicitud obtenida de Notion
+      requests.forEach(request => {
+        renderRequest(request, false); // false = no es nueva, no animar
       });
-      checkEmptyState();
-    });
-    
-    // Función para actualizar contadores
-    function updateCounters() {
-      totalRequestsEl.textContent = totalRequests;
-      pendingRequestsEl.textContent = pendingRequests;
-      completedRequestsEl.textContent = completedRequests;
-    }
-    
-    // Función para verificar estado vacío
-    function checkEmptyState() {
-      if (requestsContainer.children.length === 0) {
-        emptyState.style.display = 'block';
-      } else {
-        emptyState.style.display = 'none';
-      }
-    }
-    
-    // Función para formatear la fecha
-    function formatTime(dateString) {
-      const date = new Date(dateString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    
-    // Escuchar nuevas solicitudes
-    channel.bind('new-request', data => {
-      // Actualizar contadores
-      totalRequests++;
-      pendingRequests++;
+
+      // Actualizamos los contadores iniciales
+      pendingRequests = requests.length;
+      totalRequests = requests.length; // Asumimos que empezamos contando solo las pendientes
       updateCounters();
-      
-      // Reproducir sonido si está habilitado
-      if (soundEnabled) {
-        notificationSound.currentTime = 0;
-        notificationSound.play().catch(e => console.log("Audio play error:", e));
-      }
-      
-      // Crear nueva fila en la tabla
-      const newRow = document.createElement('tr');
-      newRow.className = 'new-request';
-      newRow.innerHTML = `
-        <td>
-          <div class="song-info">
-            <div class="song-icon">
-              <i class="fas fa-music"></i>
-            </div>
-            <div class="song-details">
-              <div class="song-title">${data.songName}</div>
-            </div>
-          </div>
-        </td>
-        <td>
-          <div class="requester">
-            <i class="fas fa-user"></i>${data.userName}
-          </div>
-        </td>
-        <td class="timestamp">${formatTime(data.timestamp)}</td>
-        <td>
-          <span class="status-badge status-pending">Pendiente</span>
-        </td>
-        <td>
-          <button class="action-btn complete" title="Marcar como atendida" onclick="markAsDone(this, '${data.id}')">
-            <i class="fas fa-check"></i>
-          </button>
-          <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${data.id}')">
-            <i class="fas fa-times"></i>
-          </button>
-        </td>
-      `;
-      
-      // Añadir al principio de la tabla
-      requestsContainer.insertBefore(newRow, requestsContainer.firstChild);
       checkEmptyState();
-    });
-    
-    // Marcar como completada
-    function markAsDone(btn, requestId) {
-      const row = btn.closest('tr');
-      
-      // Animación de salida
-      row.style.transform = 'translateX(-100px)';
-      row.style.opacity = '0';
-      row.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
-      
-      setTimeout(() => {
-        // Actualizar contadores
-        pendingRequests--;
-        completedRequests++;
-        updateCounters();
-        
-        // Cambiar estado en la fila
-        const statusBadge = row.querySelector('.status-badge');
-        statusBadge.className = 'status-badge status-completed';
-        statusBadge.textContent = 'Atendida';
-        
-        // Cambiar botones
-        const buttons = row.querySelector('td:last-child');
-        buttons.innerHTML = `
-          <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${requestId}')">
-            <i class="fas fa-trash"></i>
-          </button>
-        `;
-        
-        // Restaurar estilo
-        row.style.transform = '';
-        row.style.opacity = '';
-      }, 400);
+
+    } catch (error) {
+      console.error("Error cargando las solicitudes iniciales:", error);
+      emptyState.innerHTML = '<p style="color: #ff6b6b;">Error al cargar las solicitudes.</p>';
+      emptyState.style.display = 'block';
+    }
+  }
+  
+  // --- Escuchar nuevas solicitudes (modificado para usar la nueva función) ---
+  channel.bind('new-request', data => {
+    if (soundEnabled) {
+      notificationSound.currentTime = 0;
+      notificationSound.play().catch(e => console.log("Audio play error:", e));
     }
     
-    // Eliminar solicitud
-    function deleteRequest(btn, requestId) {
-      const row = btn.closest('tr');
-      
-      // Animación de eliminación
-      row.style.transform = 'scale(0.9)';
-      row.style.opacity = '0';
-      row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-      
-      setTimeout(() => {
-        // Verificar estado antes de eliminar
-        const statusBadge = row.querySelector('.status-badge');
-        if (statusBadge.classList.contains('status-pending')) {
-          pendingRequests--;
-        } else {
-          completedRequests--;
-        }
-        totalRequests--;
-        updateCounters();
-        
-        row.remove();
-        checkEmptyState();
-      }, 300);
-    }
-    
-    // Inicializar contadores
+    // Usamos la nueva función para pintar la fila
+    renderRequest(data, true); // true = es nueva, animar
+
+    // Actualizamos contadores
+    totalRequests++;
+    pendingRequests++;
     updateCounters();
     checkEmptyState();
-  </script>
+  });
+
+  // --- El resto de funciones (markAsDone, deleteRequest, etc.) no necesitan cambios ---
+  // ... (aquí irían el resto de tus funciones: toggle de sonido, limpiar, contadores, etc.)
+  notificationsBtn.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    notificationsBtn.innerHTML = soundEnabled ? 
+      '<i class="fas fa-bell-slash"></i> Silenciar Notificaciones' : 
+      '<i class="fas fa-bell"></i> Activar Sonido';
+  });
+  
+  clearCompletedBtn.addEventListener('click', () => {
+    document.querySelectorAll('.status-completed').forEach(row => row.parentElement.remove());
+    checkEmptyState();
+  });
+  
+  function updateCounters() {
+    totalRequestsEl.textContent = totalRequests;
+    pendingRequestsEl.textContent = pendingRequests;
+    completedRequestsEl.textContent = completedRequests;
+  }
+  
+  function checkEmptyState() {
+    emptyState.style.display = requestsContainer.children.length === 0 ? 'block' : 'none';
+  }
+  
+  function formatTime(dateString) {
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  
+  function markAsDone(btn, requestId) {
+    const row = btn.closest('tr');
+    row.style.transform = 'translateX(-100px)';
+    row.style.opacity = '0';
+    row.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+    setTimeout(() => {
+      pendingRequests--;
+      completedRequests++;
+      updateCounters();
+      const statusBadge = row.querySelector('.status-badge');
+      statusBadge.className = 'status-badge status-completed';
+      statusBadge.textContent = 'Atendida';
+      row.querySelector('td:last-child').innerHTML = `<button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${requestId}')"><i class="fas fa-trash"></i></button>`;
+      row.style.transform = '';
+      row.style.opacity = '';
+    }, 400);
+  }
+  
+  function deleteRequest(btn, requestId) {
+    const row = btn.closest('tr');
+    row.style.transform = 'scale(0.9)';
+    row.style.opacity = '0';
+    row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+    setTimeout(() => {
+      const statusBadge = row.querySelector('.status-badge');
+      if (statusBadge.classList.contains('status-pending')) {
+        pendingRequests--;
+      } else {
+        completedRequests--;
+      }
+      totalRequests--;
+      updateCounters();
+      row.remove();
+      checkEmptyState();
+    }, 300);
+  }
+
+  // --- INICIAMOS LA CARGA DE DATOS AL ABRIR LA PÁGINA ---
+  document.addEventListener('DOMContentLoaded', loadInitialRequests);
+
+</script>
+
 </body>
 </html>
