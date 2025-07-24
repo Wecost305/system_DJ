@@ -27,7 +27,7 @@
     }
 
     body {
-      background: linear-gradient(135deg, var(--darker), var(--dark));
+      background: linear-gradient(135deg, var(--darker ), var(--dark));
       color: var(--light);
       font-family: 'Segoe UI', 'Roboto', sans-serif;
       min-height: 100vh;
@@ -355,7 +355,7 @@
 
     <div class="controls">
       <button class="btn" id="notifications-btn">
-        <i class="fas fa-bell"></i> Alternar Sonido
+        <i class="fas fa-bell"></i> Activar Sonido
       </button>
       <button class="btn btn-secondary" id="clear-completed">
         <i class="fas fa-trash"></i> Limpiar Atendidas
@@ -380,9 +380,8 @@
     </div>
     
     <div id="empty-state" style="text-align: center; padding: 40px 20px; display: none;">
-      <i class="fas fa-music" style="font-size: 4rem; color: #333; margin-bottom: 20px;"></i>
-      <h3 style="color: #666; margin-bottom: 15px;">No hay solicitudes pendientes</h3>
-      <p style="color: #555;">Las solicitudes de canciones aparecerán aquí en tiempo real</p>
+      <i class="fas fa-spinner fa-spin" style="font-size: 3rem; color: #555; margin-bottom: 20px;"></i>
+      <h3 style="color: #888;">Cargando solicitudes...</h3>
     </div>
   </div>
   
@@ -396,173 +395,197 @@
   </audio>
   
   <script>
-  // --- Variables globales (sin cambios) ---
-  let totalRequests = 0;
-  let pendingRequests = 0;
-  let completedRequests = 0;
-  let soundEnabled = false;
-  
-  // --- Configurar Pusher (sin cambios) ---
-  const pusher = new Pusher('899fee44b186fe4085e1', { // Usa tu PUSHER_KEY
-    cluster: 'us2',
-    forceTLS: true
-  });
-  const channel = pusher.subscribe('song-requests');
-  
-  // --- Referencias DOM (sin cambios) ---
-  const requestsContainer = document.getElementById('requests-container');
-  const totalRequestsEl = document.getElementById('total-requests');
-  const pendingRequestsEl = document.getElementById('pending-requests');
-  const completedRequestsEl = document.getElementById('completed-requests');
-  const notificationSound = document.getElementById('notification-sound');
-  const notificationsBtn = document.getElementById('notifications-btn');
-  const clearCompletedBtn = document.getElementById('clear-completed');
-  const emptyState = document.getElementById('empty-state');
+    // --- Variables globales ---
+    let totalRequests = 0;
+    let pendingRequests = 0;
+    let completedRequests = 0;
+    let soundEnabled = false;
+    
+    // --- Configurar Pusher ---
+    // Asegúrate de que esta es tu PUSHER_KEY pública
+    const pusher = new Pusher('899fee44b186fe4085e1', {
+      cluster: 'us2',
+      forceTLS: true
+    } );
+    const channel = pusher.subscribe('song-requests');
+    
+    // --- Referencias DOM ---
+    const requestsContainer = document.getElementById('requests-container');
+    const totalRequestsEl = document.getElementById('total-requests');
+    const pendingRequestsEl = document.getElementById('pending-requests');
+    const completedRequestsEl = document.getElementById('completed-requests');
+    const notificationSound = document.getElementById('notification-sound');
+    const notificationsBtn = document.getElementById('notifications-btn');
+    const clearCompletedBtn = document.getElementById('clear-completed');
+    const emptyState = document.getElementById('empty-state');
 
-  // --- NUEVA FUNCIÓN PARA PINTAR UNA FILA ---
-  // (Hemos movido la lógica de crear una fila a su propia función para poder reutilizarla)
-  function renderRequest(data, isNew = false) {
-    const newRow = document.createElement('tr');
-    if (isNew) {
-      newRow.className = 'new-request'; // Añade animación solo a las nuevas
+    // --- Función para pintar una fila en la tabla ---
+    function renderRequest(data, isNew = false) {
+      const newRow = document.createElement('tr');
+      if (isNew) {
+        newRow.className = 'new-request'; // Añade animación solo a las nuevas
+      }
+      
+      newRow.innerHTML = `
+        <td>
+          <div class="song-info">
+            <div class="song-icon"><i class="fas fa-music"></i></div>
+            <div class="song-details"><div class="song-title">${data.songName}</div></div>
+          </div>
+        </td>
+        <td><div class="requester"><i class="fas fa-user"></i>${data.userName}</div></td>
+        <td class="timestamp">${formatTime(data.timestamp)}</td>
+        <td><span class="status-badge status-pending">Pendiente</span></td>
+        <td>
+          <button class="action-btn complete" title="Marcar como atendida" onclick="markAsDone(this, '${data.id}')"><i class="fas fa-check"></i></button>
+          <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${data.id}')"><i class="fas fa-times"></i></button>
+        </td>
+      `;
+      
+      requestsContainer.insertBefore(newRow, requestsContainer.firstChild);
+    }
+
+    // --- Función para cargar datos iniciales desde Notion ---
+    async function loadInitialRequests() {
+      try {
+        // La URL de la función de Netlify es /.netlify/functions/NOMBRE_DEL_ARCHIVO
+        const response = await fetch('/.netlify/functions/get-requests');
+        if (!response.ok) {
+          throw new Error(`Error del servidor: ${response.statusText}`);
+        }
+        const requests = await response.json();
+
+        requestsContainer.innerHTML = ''; // Limpiamos la tabla
+
+        // Pintamos cada solicitud obtenida de Notion
+        requests.forEach(request => {
+          renderRequest(request, false); // false = no es nueva, no animar
+        });
+
+        // Actualizamos los contadores iniciales
+        pendingRequests = requests.length;
+        totalRequests = requests.length;
+        completedRequests = 0; // Empezamos sin completadas
+        updateCounters();
+        checkEmptyState();
+
+      } catch (error) {
+        console.error("Error cargando las solicitudes iniciales:", error);
+        emptyState.innerHTML = `
+          <i class="fas fa-exclamation-circle" style="font-size: 3rem; color: #ff6b6b; margin-bottom: 20px;"></i>
+          <h3 style="color: #ff6b6b;">Error al cargar las solicitudes</h3>
+          <p style="color: #888;">No se pudo conectar con el servidor. Inténtalo de nuevo más tarde.</p>
+        `;
+        emptyState.style.display = 'block';
+      }
     }
     
-    newRow.innerHTML = `
-      <td>
-        <div class="song-info">
-          <div class="song-icon"><i class="fas fa-music"></i></div>
-          <div class="song-details"><div class="song-title">${data.songName}</div></div>
-        </div>
-      </td>
-      <td><div class="requester"><i class="fas fa-user"></i>${data.userName}</div></td>
-      <td class="timestamp">${formatTime(data.timestamp)}</td>
-      <td><span class="status-badge status-pending">Pendiente</span></td>
-      <td>
-        <button class="action-btn complete" title="Marcar como atendida" onclick="markAsDone(this, '${data.id}')"><i class="fas fa-check"></i></button>
-        <button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${data.id}')"><i class="fas fa-times"></i></button>
-      </td>
-    `;
-    
-    requestsContainer.insertBefore(newRow, requestsContainer.firstChild);
-  }
-
-  // --- NUEVA FUNCIÓN PARA CARGAR DATOS INICIALES ---
-  async function loadInitialRequests() {
-    try {
-      // La URL de la función de Netlify es /.netlify/functions/NOMBRE_ARCHIVO
-      const response = await fetch('/.netlify/functions/get-requests');
-      if (!response.ok) {
-        throw new Error('No se pudo conectar al servidor.');
+    // --- Escuchar nuevas solicitudes de Pusher ---
+    channel.bind('new-request', data => {
+      if (soundEnabled) {
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(e => console.log("Audio play error:", e));
       }
-      const requests = await response.json();
+      
+      renderRequest(data, true); // true = es nueva, animar
 
-      // Limpiamos la tabla por si acaso
-      requestsContainer.innerHTML = '';
-
-      // Pintamos cada solicitud obtenida de Notion
-      requests.forEach(request => {
-        renderRequest(request, false); // false = no es nueva, no animar
+      // Actualizamos contadores
+      totalRequests++;
+      pendingRequests++;
+      updateCounters();
+      checkEmptyState();
+    });
+    
+    // --- Funciones de la Interfaz ---
+    notificationsBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      notificationsBtn.innerHTML = soundEnabled ? 
+        '<i class="fas fa-bell-slash"></i> Silenciar Sonido' : 
+        '<i class="fas fa-bell"></i> Activar Sonido';
+    });
+    
+    clearCompletedBtn.addEventListener('click', () => {
+      const completedRows = document.querySelectorAll('.status-completed');
+      completedRows.forEach(row => {
+        const parentRow = row.closest('tr');
+        if (parentRow) {
+          parentRow.remove();
+        }
       });
-
-      // Actualizamos los contadores iniciales
-      pendingRequests = requests.length;
-      totalRequests = requests.length; // Asumimos que empezamos contando solo las pendientes
-      updateCounters();
       checkEmptyState();
-
-    } catch (error) {
-      console.error("Error cargando las solicitudes iniciales:", error);
-      emptyState.innerHTML = '<p style="color: #ff6b6b;">Error al cargar las solicitudes.</p>';
-      emptyState.style.display = 'block';
-    }
-  }
-  
-  // --- Escuchar nuevas solicitudes (modificado para usar la nueva función) ---
-  channel.bind('new-request', data => {
-    if (soundEnabled) {
-      notificationSound.currentTime = 0;
-      notificationSound.play().catch(e => console.log("Audio play error:", e));
+    });
+    
+    function updateCounters() {
+      totalRequestsEl.textContent = totalRequests;
+      pendingRequestsEl.textContent = pendingRequests;
+      completedRequestsEl.textContent = completedRequests;
     }
     
-    // Usamos la nueva función para pintar la fila
-    renderRequest(data, true); // true = es nueva, animar
-
-    // Actualizamos contadores
-    totalRequests++;
-    pendingRequests++;
-    updateCounters();
-    checkEmptyState();
-  });
-
-  // --- El resto de funciones (markAsDone, deleteRequest, etc.) no necesitan cambios ---
-  // ... (aquí irían el resto de tus funciones: toggle de sonido, limpiar, contadores, etc.)
-  notificationsBtn.addEventListener('click', () => {
-    soundEnabled = !soundEnabled;
-    notificationsBtn.innerHTML = soundEnabled ? 
-      '<i class="fas fa-bell-slash"></i> Silenciar Notificaciones' : 
-      '<i class="fas fa-bell"></i> Activar Sonido';
-  });
-  
-  clearCompletedBtn.addEventListener('click', () => {
-    document.querySelectorAll('.status-completed').forEach(row => row.parentElement.remove());
-    checkEmptyState();
-  });
-  
-  function updateCounters() {
-    totalRequestsEl.textContent = totalRequests;
-    pendingRequestsEl.textContent = pendingRequests;
-    completedRequestsEl.textContent = completedRequests;
-  }
-  
-  function checkEmptyState() {
-    emptyState.style.display = requestsContainer.children.length === 0 ? 'block' : 'none';
-  }
-  
-  function formatTime(dateString) {
-    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  
-  function markAsDone(btn, requestId) {
-    const row = btn.closest('tr');
-    row.style.transform = 'translateX(-100px)';
-    row.style.opacity = '0';
-    row.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
-    setTimeout(() => {
-      pendingRequests--;
-      completedRequests++;
-      updateCounters();
-      const statusBadge = row.querySelector('.status-badge');
-      statusBadge.className = 'status-badge status-completed';
-      statusBadge.textContent = 'Atendida';
-      row.querySelector('td:last-child').innerHTML = `<button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${requestId}')"><i class="fas fa-trash"></i></button>`;
-      row.style.transform = '';
-      row.style.opacity = '';
-    }, 400);
-  }
-  
-  function deleteRequest(btn, requestId) {
-    const row = btn.closest('tr');
-    row.style.transform = 'scale(0.9)';
-    row.style.opacity = '0';
-    row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-    setTimeout(() => {
-      const statusBadge = row.querySelector('.status-badge');
-      if (statusBadge.classList.contains('status-pending')) {
-        pendingRequests--;
+    function checkEmptyState() {
+      if (requestsContainer.children.length === 0) {
+        emptyState.innerHTML = `
+          <i class="fas fa-music" style="font-size: 4rem; color: #333; margin-bottom: 20px;"></i>
+          <h3 style="color: #666; margin-bottom: 15px;">No hay solicitudes pendientes</h3>
+          <p style="color: #555;">Las nuevas solicitudes aparecerán aquí en tiempo real.</p>
+        `;
+        emptyState.style.display = 'block';
       } else {
-        completedRequests--;
+        emptyState.style.display = 'none';
       }
-      totalRequests--;
-      updateCounters();
-      row.remove();
-      checkEmptyState();
-    }, 300);
-  }
+    }
+    
+    function formatTime(dateString) {
+      return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function markAsDone(btn, requestId) {
+      const row = btn.closest('tr');
+      row.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+      row.style.transform = 'translateX(100px)';
+      row.style.opacity = '0';
+      
+      setTimeout(() => {
+        pendingRequests--;
+        completedRequests++;
+        updateCounters();
+        
+        const statusBadge = row.querySelector('.status-badge');
+        statusBadge.className = 'status-badge status-completed';
+        statusBadge.textContent = 'Atendida';
+        
+        row.querySelector('td:last-child').innerHTML = `<button class="action-btn delete" title="Eliminar solicitud" onclick="deleteRequest(this, '${requestId}')"><i class="fas fa-trash"></i></button>`;
+        
+        // Mover al final de la lista en lugar de desaparecer
+        row.style.transform = '';
+        row.style.opacity = '1';
+        requestsContainer.appendChild(row);
+      }, 400);
+    }
+    
+    function deleteRequest(btn, requestId) {
+      const row = btn.closest('tr');
+      row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      row.style.transform = 'scale(0.9)';
+      row.style.opacity = '0';
+      
+      setTimeout(() => {
+        const statusBadge = row.querySelector('.status-badge');
+        if (statusBadge.classList.contains('status-pending')) {
+          pendingRequests--;
+        } else {
+          completedRequests--;
+        }
+        totalRequests--;
+        updateCounters();
+        
+        row.remove();
+        checkEmptyState();
+      }, 300);
+    }
 
-  // --- INICIAMOS LA CARGA DE DATOS AL ABRIR LA PÁGINA ---
-  document.addEventListener('DOMContentLoaded', loadInitialRequests);
-
-</script>
-
+    // --- Iniciar la aplicación ---
+    document.addEventListener('DOMContentLoaded', loadInitialRequests);
+  </script>
 </body>
 </html>
+
